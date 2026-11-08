@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# Configure default Wi-Fi settings for Zyxel VMG8825-T50.
+# The 5GHz external power amplifier saturates if driven above 16 dBm on UNII-1
+# (channels 36-48), resulting in high EVM distortion, packet retries, and rate
+# drops down to QPSK (MCS 2). Setting txpower to 14 dBm keeps it in the linear
+# amplification range.
+#
+. /lib/functions.sh
+
+[ "$(board_name)" = "zyxel,vmg8825-t50" ] || exit 0
+
+uci -q set wireless.radio1.txpower='14'
+uci -q commit wireless
+
+exit 0
