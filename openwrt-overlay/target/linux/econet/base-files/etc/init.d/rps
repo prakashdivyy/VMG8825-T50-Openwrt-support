@@ -30,7 +30,7 @@
 START=21
 
 apply_rps() {
-	for q in /sys/class/net/eth0/queues/rx-*/rps_cpus; do
+	for q in /sys/class/net/*/queues/rx-*/rps_cpus; do
 		[ -e "$q" ] && echo e > "$q"
 	done
 }

@@ -76,6 +76,11 @@ deploy_generic() {
 		mkdir -p /lib/firmware/mediatek
 		cp "$GENERIC_BIN" /lib/firmware/mediatek/mt7615e_eeprom_0000:01:00.0.bin
 		cp "$GENERIC_BIN" /lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin
+
+		# Byte 0xf3 (offset 243) is the external-PA target power for 5 GHz (0x26 = 19 dBm).
+		# In generic.bin it is 0x00, which causes mt7615_init_txpower to clamp 5 GHz power.
+		printf '\x26' | dd of=/lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin bs=1 seek=243 count=1 conv=notrunc 2>/dev/null
+
 		sync
 		return 0
 	else
