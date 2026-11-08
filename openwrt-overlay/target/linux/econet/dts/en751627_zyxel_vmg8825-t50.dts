@@ -479,11 +479,6 @@
 		local-mac-address = [AA BB CC DD EE 11];
 		nvmem-cells = <&eeprom_radio1>;
 		nvmem-cell-names = "eeprom";
-		/* VMG8825-T50 5 GHz RF path: only RF chain 2 is connected to the antenna.
-		 * Dead chains 0, 1, 3 drop 2-stream packets, causing 90k+ retries and 27 Mbps caps.
-		 * Forcing antenna mask 0x04 (Chain 2 only, 1 NSS) gives full single-stream throughput.
-		 */
-		mediatek,antenna-mask = <0x04>;
 	};
 };
 
