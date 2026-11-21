@@ -25,7 +25,7 @@ OUT="${OUT:-$REPO/out}"
 JOBS="${JOBS:-$(nproc)}"
 # The OpenWrt commit everything here was tested against (README.md,
 # "Hardware"). Override to try a newer one; expect some drift.
-OPENWRT_REF="${OPENWRT_REF:-928cd26bd938b8ac46b79e14f5f9f4b1d772abe8}"
+OPENWRT_REF="${OPENWRT_REF:-6bd48701eff9ac65bb626b6c903f5f2155bbfa6e}"
 BIN="$REPO/openwrt/bin/targets/econet/en751627"
 P=openwrt-econet-en751627-zyxel_vmg8825-t50
 
