@@ -27,11 +27,15 @@ if [ "$(uname)" = "Darwin" ]; then
 	echo "macOS detected: using Docker named volume ($VOLUME) for case-sensitive ext4 build"
 	"$DOCKER" volume inspect "$VOLUME" >/dev/null 2>&1 || "$DOCKER" volume create "$VOLUME" >/dev/null
 
-	# Sync repo to container volume (skip git history and build output to be fast)
+	# Sync repo sources to container volume (skip openwrt/, out/, .git, and
+	# prebuilt firmware binaries so the volume's own incremental openwrt/
+	# tree and timestamps stay intact).
 	echo "Syncing workspace into container volume..."
 	export COPYFILE_DISABLE=1
-	tar --exclude='out/*' --exclude='.git' -cf - -C "$REPO" . | \
-		"$DOCKER" run --rm -i -v "$VOLUME:/work" "$IMAGE" sh -c "tar -xf - -C /work && find /work -name '._*' -delete"
+	tar --exclude='openwrt' --exclude='out/*' --exclude='.git' \
+		--exclude='firmware/*.bin' --exclude='.DS_Store' -cf - -C "$REPO" . | \
+		"$DOCKER" run --rm -i -v "$VOLUME:/work" "$IMAGE" \
+			sh -c "rm -rf /work/openwrt-overlay /work/bldr-patch /work/tools && tar -xf - -C /work && find /work -maxdepth 4 -name '._*' -delete"
 
 	tty=; [ -t 0 ] && tty=-it
 	"$DOCKER" run --rm $tty \
