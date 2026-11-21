@@ -9,7 +9,8 @@
 # - If the calibration sits at shifted offsets (e.g. 128 KiB earlier), it extracts the
 #   calibrated blobs to /lib/firmware/mediatek/ and triggers a live driver rebind.
 # - If no valid calibration is found on flash (flash erased / blank), it falls back to
-#   deploying the generic MT7615 calibration blob so Wi-Fi does not get stuck at 5-6 dBm.
+#   deploying per-band generic MT7615 calibration blobs (2.4 GHz internal-PA/TSSI and
+#   5 GHz external-PA/eLNA) so Wi-Fi works with balanced chains and full TX power.
 #
 # Usage:
 #   vmg8825-wifi-caldata check|scan   # Scan and report offsets vs DTS
@@ -20,13 +21,16 @@
 set -u
 
 CMD="${1:-check}"
-DEV="/dev/mtd0"
-START="0x7000000"
+DEV="${DEV:-/dev/mtd0}"
+TAIL_START="0xea00000"  # Primary scan window: flash tail where wifi-caldata lives
+START="0x7000000"       # Fallback scan window if not found in the tail
 END="0x10000000"
 STRIDE=$((0x20000))     # 128 KiB eraseblocks
 OFF_F3=$((0xf3))        # Byte 0xf3: 0x00 on 2.4 GHz TSSI, non-zero on 5 GHz external-PA
 EEPROM_LEN=19880
-GENERIC_BIN="/lib/firmware/mediatek/mt7615e_generic.bin"
+FW_DIR="${FW_DIR:-/lib/firmware/mediatek}"
+GENERIC_2G_BIN="$FW_DIR/mt7615e_generic_2g.bin"
+GENERIC_5G_BIN="$FW_DIR/mt7615e_generic_5g.bin"
 
 # Reference offsets hardcoded in board DTS
 DT_R0=$((0xeae0000))
@@ -40,19 +44,17 @@ if [ ! -e "$DEV" ]; then
 	fi
 fi
 
-scan_flash() {
-	[ -e "$DEV" ] || { echo "FATAL: flash device $DEV not found" >&2; return 1; }
-
-	local blk_start=$((START / STRIDE))
-	local blk_end=$((END / STRIDE))
+scan_range() {
+	local blk_start=$(($1 / STRIDE))
+	local blk_end=$(($2 / STRIDE))
 	local blk=$blk_start
 
-	r0off=""
-	r1off=""
-
 	while [ "$blk" -lt "$blk_end" ]; do
-		sig=$(dd if="$DEV" bs="$STRIDE" count=1 skip="$blk" 2>/dev/null | hexdump -v -n 2 -e '1/1 "%02x"')
-		if [ "$sig" = "1576" ]; then
+		# Match full MT7615 EEPROM header: chip ID 0x7615 (15 76) at 0x00..0x01
+		# and PCI dev/vendor ID 0x7615/0x14c3 (15 76 c3 14) at 0x0a..0x0d.
+		hdr=$(dd if="$DEV" bs="$STRIDE" count=1 skip="$blk" 2>/dev/null | hexdump -v -n 14 -e '1/1 "%02x"')
+		case "$hdr" in
+		1576????????????????1576c314)
 			off=$((blk * STRIDE))
 			f3=$(dd if="$DEV" bs=1 skip=$((off + OFF_F3)) count=1 2>/dev/null | hexdump -v -n 1 -e '1/1 "%02x"')
 			if [ "$f3" = "00" ]; then
@@ -60,28 +62,43 @@ scan_flash() {
 			else
 				[ -z "$r1off" ] && r1off=$off
 			fi
-		fi
+			if [ -n "$r0off" ] && [ -n "$r1off" ]; then
+				return 0
+			fi
+			;;
+		esac
 		blk=$((blk + 1))
 	done
+	return 2
+}
 
-	if [ -z "$r0off" ] || [ -z "$r1off" ]; then
-		return 2
+scan_flash() {
+	[ -e "$DEV" ] || { echo "FATAL: flash device $DEV not found" >&2; return 1; }
+
+	r0off=""
+	r1off=""
+
+	# Scan the flash tail first so real factory caldata is found quickly and
+	# cannot be shadowed by reservearea/rootfs_data contents earlier in flash.
+	if scan_range "$TAIL_START" "$END"; then
+		return 0
 	fi
-	return 0
+
+	scan_range "$START" "$TAIL_START"
 }
 
 deploy_generic() {
-	if [ -f "$GENERIC_BIN" ]; then
-		echo "vmg8825-wifi-caldata: deploying generic MT7615 calibration blob..."
-		mkdir -p /lib/firmware/mediatek
-		cp "$GENERIC_BIN" /lib/firmware/mediatek/mt7615e_eeprom_0000:01:00.0.bin
-		cp "$GENERIC_BIN" /lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin
-		sync
-		return 0
-	else
-		echo "vmg8825-wifi-caldata: generic calibration blob $GENERIC_BIN not found!" >&2
+	if [ ! -f "$GENERIC_2G_BIN" ] || [ ! -f "$GENERIC_5G_BIN" ]; then
+		echo "vmg8825-wifi-caldata: generic calibration blobs missing ($GENERIC_2G_BIN / $GENERIC_5G_BIN)!" >&2
 		return 1
 	fi
+
+	echo "vmg8825-wifi-caldata: deploying per-band generic MT7615 calibration blobs..."
+	mkdir -p "$FW_DIR"
+	cp "$GENERIC_2G_BIN" "$FW_DIR/mt7615e_eeprom_0000:01:00.0.bin"
+	cp "$GENERIC_5G_BIN" "$FW_DIR/mt7615e_eeprom_0001:01:00.0.bin"
+	sync
+	return 0
 }
 
 do_rebind() {
@@ -105,9 +122,9 @@ case "$CMD" in
 check|scan)
 	echo "Scanning $DEV for MT7615 calibration blocks..."
 	if ! scan_flash; then
-		echo "WARNING: Could not locate both MT7615 calibration blocks (sig 15 76) on flash."
-		if [ -f "$GENERIC_BIN" ]; then
-			echo "Generic calibration fallback is available at $GENERIC_BIN."
+		echo "WARNING: Could not locate both MT7615 calibration blocks (15 76 ... 15 76 c3 14) on flash."
+		if [ -f "$GENERIC_2G_BIN" ] && [ -f "$GENERIC_5G_BIN" ]; then
+			echo "Per-band generic calibration fallbacks are available at $GENERIC_2G_BIN and $GENERIC_5G_BIN."
 		fi
 		exit 1
 	fi
@@ -134,14 +151,14 @@ extract)
 	fi
 
 	printf "Extracting calibration: radio0 @0x%08x, radio1 @0x%08x\n" "$r0off" "$r1off"
-	mkdir -p /lib/firmware/mediatek
+	mkdir -p "$FW_DIR"
 
-	dd if="$DEV" bs=1 skip="$r0off" count="$EEPROM_LEN" of=/lib/firmware/mediatek/mt7615e_eeprom_0000:01:00.0.bin 2>/dev/null
-	dd if="$DEV" bs=1 skip="$r1off" count="$EEPROM_LEN" of=/lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin 2>/dev/null
+	dd if="$DEV" bs=1 skip="$r0off" count="$EEPROM_LEN" of="$FW_DIR/mt7615e_eeprom_0000:01:00.0.bin" 2>/dev/null
+	dd if="$DEV" bs=1 skip="$r1off" count="$EEPROM_LEN" of="$FW_DIR/mt7615e_eeprom_0001:01:00.0.bin" 2>/dev/null
 	sync
 
-	echo "Wrote /lib/firmware/mediatek/mt7615e_eeprom_0000:01:00.0.bin ($(wc -c < /lib/firmware/mediatek/mt7615e_eeprom_0000:01:00.0.bin) bytes)"
-	echo "Wrote /lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin ($(wc -c < /lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin) bytes)"
+	echo "Wrote $FW_DIR/mt7615e_eeprom_0000:01:00.0.bin ($(wc -c < "$FW_DIR/mt7615e_eeprom_0000:01:00.0.bin") bytes)"
+	echo "Wrote $FW_DIR/mt7615e_eeprom_0001:01:00.0.bin ($(wc -c < "$FW_DIR/mt7615e_eeprom_0001:01:00.0.bin") bytes)"
 	;;
 
 rebind)
@@ -149,13 +166,13 @@ rebind)
 	;;
 
 auto)
-	STAMP=/etc/vmg8825-wifi-caldata.done
+	STAMP="${STAMP:-/etc/vmg8825-wifi-caldata.done}"
 	if [ -f "$STAMP" ]; then
 		exit 0
 	fi
 
 	if ! scan_flash; then
-		echo "vmg8825-wifi-caldata: no factory calibration found on flash; deploying generic fallback" >&2
+		echo "vmg8825-wifi-caldata: no factory calibration found on flash; deploying per-band generic fallback" >&2
 		if deploy_generic; then
 			do_rebind
 			echo "STATUS=GENERIC_FALLBACK" > "$STAMP"
@@ -172,10 +189,10 @@ auto)
 	fi
 
 	echo "vmg8825-wifi-caldata: shifted calibration detected! radio0 @0x$(printf %x "$r0off"), radio1 @0x$(printf %x "$r1off")"
-	mkdir -p /lib/firmware/mediatek
+	mkdir -p "$FW_DIR"
 
-	dd if="$DEV" bs=1 skip="$r0off" count="$EEPROM_LEN" of=/lib/firmware/mediatek/mt7615e_eeprom_0000:01:00.0.bin 2>/dev/null
-	dd if="$DEV" bs=1 skip="$r1off" count="$EEPROM_LEN" of=/lib/firmware/mediatek/mt7615e_eeprom_0001:01:00.0.bin 2>/dev/null
+	dd if="$DEV" bs=1 skip="$r0off" count="$EEPROM_LEN" of="$FW_DIR/mt7615e_eeprom_0000:01:00.0.bin" 2>/dev/null
+	dd if="$DEV" bs=1 skip="$r1off" count="$EEPROM_LEN" of="$FW_DIR/mt7615e_eeprom_0001:01:00.0.bin" 2>/dev/null
 	sync
 
 	echo "vmg8825-wifi-caldata: extracted calibration blobs; rebinding mt7615e..."
@@ -185,7 +202,7 @@ auto)
 	;;
 
 *)
-	echo "Usage: $0 {check|extract|rebind|auto}" >&2
+	echo "Usage: $0 {check|scan|extract|rebind|auto}" >&2
 	exit 1
 	;;
 esac
