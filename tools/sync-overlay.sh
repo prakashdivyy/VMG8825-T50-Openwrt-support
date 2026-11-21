@@ -8,10 +8,11 @@
 # or, worse, an edit made directly in openwrt/ that never gets committed
 # because only openwrt-overlay/ is tracked by this repo.
 #
-# Three modes:
-#   push    overlay -> openwrt/   (before building; the default)
-#   pull    openwrt/ -> overlay   (after editing in the build tree)
-#   check   compare only, exit 1 on drift, print what differs
+# Four modes:
+#   push             overlay -> openwrt/   (before building; the default)
+#   pull             openwrt/ -> overlay   (only files already owned by overlay)
+#   check            compare only, exit 1 on drift, print what differs
+#   add <relpath>    start tracking an openwrt/<relpath> file in openwrt-overlay/
 #
 # "files/" is deliberately not synced: those are payloads baked into an image
 # by the image recipe, not sources the build tree reads from a fixed path.
@@ -32,6 +33,18 @@ die() { echo "sync-overlay: $*" >&2; exit 1; }
 
 [ -d "$REPO/openwrt/target/linux" ] || die "openwrt/ is empty -- run: git submodule update --init"
 
+if [ "$MODE" = add ]; then
+	rel="${2#openwrt/}"
+	[ -n "$rel" ] || die "usage: $0 add <path-relative-to-openwrt>"
+	src="$REPO/openwrt/$rel"
+	dst="$REPO/openwrt-overlay/$rel"
+	[ -f "$src" ] || die "missing file in openwrt/: $src"
+	mkdir -p "$(dirname "$dst")"
+	cp -a "$src" "$dst"
+	echo "add   $rel"
+	exit 0
+fi
+
 drift=0
 
 for pair in $PAIRS; do
@@ -47,35 +60,34 @@ for pair in $PAIRS; do
 		echo "push  ${pair%%:*}"
 		;;
 	pull)
-		cp -a "$dst/." "$src/"
+		# Only pull files that the overlay already owns, so unrelated
+		# upstream boards/patches in openwrt/ are never copied into
+		# openwrt-overlay/. Use '$0 add <relpath>' to track new files.
+		for f in $(cd "$src" && find . -type f | sed 's|^\./||' | sort); do
+			if [ -f "$dst/$f" ]; then
+				cp -a "$dst/$f" "$src/$f"
+			else
+				echo "WARN  missing in openwrt/: ${pair%%:*}/$f" >&2
+			fi
+		done
 		echo "pull  ${pair%%:*}"
 		;;
 	check)
-		# Only compare files the overlay actually owns. The build tree
-		# carries upstream boards and build artifacts we do not track,
-		# so a plain recursive diff would be all noise.
-		(cd "$src" && find . -type f) | while read -r f; do
+		# Only compare files the overlay actually owns.
+		for f in $(cd "$src" && find . -type f | sed 's|^\./||' | sort); do
 			if ! cmp -s "$src/$f" "$dst/$f"; then
-				echo "DRIFT ${pair%%:*}/${f#./}"
+				echo "DRIFT ${pair%%:*}/$f"
+				drift=$((drift + 1))
 			fi
 		done
 		;;
 	*)
-		die "unknown mode '$MODE' (push|pull|check)"
+		die "unknown mode '$MODE' (push|pull|check|add)"
 		;;
 	esac
 done
 
 if [ "$MODE" = check ]; then
-	# The subshell above cannot set drift, so recount here.
-	for pair in $PAIRS; do
-		src="$REPO/openwrt-overlay/${pair%%:*}"
-		dst="$REPO/${pair#*:}"
-		n=$( (cd "$src" && find . -type f) | while read -r f; do
-			cmp -s "$src/$f" "$dst/$f" || echo x
-		done | wc -l )
-		drift=$((drift + n))
-	done
 	if [ "$drift" -gt 0 ]; then
 		echo "sync-overlay: $drift file(s) differ -- run '$0 push' or '$0 pull'" >&2
 		exit 1
@@ -88,6 +100,6 @@ push)
 	echo
 	echo "Note: target base-files changes need an explicit rebuild before"
 	echo "they reach an image:"
-	echo "  make package/base-files/clean && make package/install && make target/linux/install"
+	echo "  make package/base-files/{clean,compile} && make package/install && make target/install"
 	;;
 esac

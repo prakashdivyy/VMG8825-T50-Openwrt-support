@@ -11,8 +11,6 @@
 [ "$ACTION" = "add" ] || exit 0
 [ "$DEVICENAME" = "eth0" ] || exit 0
 
-for q in /sys/class/net/eth0/queues/rx-*/rps_cpus; do
-	[ -e "$q" ] && echo e > "$q"
-done
+[ -x /etc/init.d/rps ] && /etc/init.d/rps start
 
 exit 0

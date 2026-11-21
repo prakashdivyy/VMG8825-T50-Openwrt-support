@@ -5,48 +5,31 @@ already up (i.e. run right after netboot.py reports SHELL PROMPT REACHED).
 
 Usage: serial_cmd.py "<cmd1>" ["<cmd2>" ...]
 """
-import os, sys, time, select, termios
+import os
+import sys
 
-DEV = "/dev/ttyUSB0"
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 
-if len(sys.argv) < 2:
-    raise SystemExit(__doc__)
+from zhal_serial import DEFAULT_DEV, SerialSession
 
-fd = os.open(DEV, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-a = termios.tcgetattr(fd)
-a[0] = a[1] = a[3] = 0
-a[4] = a[5] = termios.B115200
-a[6][termios.VMIN] = 0
-a[6][termios.VTIME] = 0
-termios.tcsetattr(fd, termios.TCSANOW, a)
-termios.tcflush(fd, termios.TCIOFLUSH)
 
-def send(s):
-    for c in s.encode():
-        os.write(fd, bytes([c])); time.sleep(0.01)
-    os.write(fd, b"\r")
+def main():
+    if len(sys.argv) < 2:
+        raise SystemExit(__doc__)
 
-def pump(t):
-    buf = b""; end = time.time() + t
-    while time.time() < end:
-        r, _, _ = select.select([fd], [], [], 0.15)
-        if r:
-            try:
-                d = os.read(fd, 4096)
-            except OSError:
-                d = b""
-            if d:
-                buf += d
-    return buf
+    with SerialSession(dev=DEFAULT_DEV, char_delay=0.01, cr_delay=0, echo=False) as ser:
+        # wake the prompt / drain any pending banner
+        ser.send("")
+        ser.pump(1, quiet=True)
 
-# wake the prompt / drain any pending banner
-send("")
-pump(1)
+        for cmd in sys.argv[1:]:
+            ser.send(cmd)
+            out = ser.pump(3, quiet=True)
+            sys.stdout.write(out.decode(errors="replace"))
+            sys.stdout.flush()
 
-for cmd in sys.argv[1:]:
-    send(cmd)
-    out = pump(3)
-    sys.stdout.write(out.decode(errors="replace"))
-    sys.stdout.flush()
 
-os.close(fd)
+if __name__ == "__main__":
+    main()
