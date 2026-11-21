@@ -41,16 +41,16 @@ precautionary pending a live EEE test on this board).
  #define	NUM_TRGMII_CTRL			5
 --- a/drivers/net/dsa/mt7530.c
 +++ b/drivers/net/dsa/mt7530.c
-@@ -3051,7 +3051,7 @@
+@@ -3140,7 +3140,7 @@
  	 * phylink disables EEE on these PHYs and refuses to enable it from
  	 * userspace.
  	 */
--	if (priv->id != ID_EN7528) {
-+	if (priv->id != ID_EN7528 && priv->id != ID_EN751627) {
+-	if (priv->id != ID_EN7528 &&
++	if (priv->id != ID_EN7528 && priv->id != ID_EN751627 &&
+ 	    config->mac_capabilities & (MAC_100FD | MAC_1000FD)) {
  		u32 eeecr = mt7530_read(priv, MT753X_PMEEECR_P(port));
  
- 		config->lpi_capabilities = MAC_100FD | MAC_1000FD | MAC_2500FD;
-@@ -3188,7 +3188,7 @@
+@@ -3297,7 +3297,7 @@
  	 * interface is up.
  	 */
  	if (priv->id != ID_MT7530 && priv->id != ID_MT7621 &&
@@ -59,7 +59,7 @@ precautionary pending a live EEE test on this board).
  		return;
  
  	mask = BIT(cpu_dp->index);
-@@ -3396,6 +3396,16 @@
+@@ -3506,6 +3506,16 @@
  		.pcs_ops = &mt7530_pcs_ops,
  		.sw_setup = mt7988_setup,
  		.phy_read_c22 = mt7531_ind_c22_phy_read,
