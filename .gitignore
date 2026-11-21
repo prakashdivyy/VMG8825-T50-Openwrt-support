@@ -5,6 +5,7 @@ __pycache__/
 # Editor/tool cruft
 .claude/
 .serena/
+.DS_Store
 
 # Never commit real secrets if you re-add local scratch files
 keys.txt
