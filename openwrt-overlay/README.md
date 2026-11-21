@@ -44,18 +44,15 @@ zloader checksum gates and the md5 across the wire, then `sysupgrade`s it
   `tclinux` byte-static after flashing, which the bootloader's boot-time
   CRC check depends on — see `NEXT_STEPS.md`.
 - `dts/en751627_zyxel_vmg8825-t50.dts` — the board devicetree: MT7615
-  WiFi (both radios), USB, the `rootfs_data` partition node, `gmac0`
-  (LAN) and `gmac1` (ETHWAN) enabled, and the `bootloader` partition
-  node (labelled `bootloader_part`) left writable — needed once to apply
-  the bootloader patch from `BOOTLOADER-PATCH.md`.
+  WiFi (both radios), USB, LEDs/buttons, the `rootfs_data` partition
+  node, `gmac0` + DSA `switch` (`lan1`–`lan4` + `wan`) enabled, and the
+  `bootloader` partition node (labelled `bootloader_part`) left writable
+  — needed once to apply the bootloader patch from `BOOTLOADER-PATCH.md`.
 - `dts/en751627_zyxel_vmg8825-t50-locked.dts` — `#include`s the above and
   overrides `&bootloader_part` back to `read-only;`. Builds as the
   separate `zyxel_vmg8825-t50-locked` device (see `image/en751627.mk`);
   reflash to this one once the bootloader patch is applied and verified —
   see `install-guide/README.md` §7a.
-- `dts/en751627_zyxel_vmg8825-t50-mt7615-eeprom.dtsi` — a generic
-  MT7615 calibration blob wired in via `mediatek,eeprom-data`, for
-  boards whose radio has no factory calibration in eFuse or flash.
 - `dts/en751627.dtsi` — added USB PHY devicetree nodes (`usb_xtal`,
   `usb_phy`/`usb2_phy_p0`/`usb3_phy_p0`), with
   `mediatek,u3p-dis-msk = <0x1>` on the `usb` xhci-mtk node (this board
@@ -81,9 +78,6 @@ zloader checksum gates and the md5 across the wire, then `sysupgrade`s it
   sequence the switch's embedded WAN PHY needs at startup; without it
   `gmac1`/ETHWAN never links even though its MAC registers are
   configured correctly (see `NEXT_STEPS.md`).
-- `VMG8825-T50-FLASHING.md` — flashing/boot notes for this board.
-- `scripts/` — board-specific helper scripts (TFTP flash wrapper,
-  autoboot watcher).
 
 **Build pitfall:** after patching `econet-eth`'s driver source,
 `package/kernel/econet-eth/{clean,compile}` + `target/install` alone

@@ -11,19 +11,15 @@ the shipped `era-signed.bin` (the two are only consistent when produced
 together; keeping a mismatched pair around is actively misleading).
 Build your own `.trx` from source if you want one — see below.
 
-> **All images were rebuilt 2026-10-18** from the current tree, with
-> `tools/build-firmware.sh`. Against the 2026-09-21 images that were
-> flashed and tested on hardware, the kernel is **byte-for-byte
-> identical** (compared inside the era images). The rootfs differs only
-> in three new scripts plus their package metadata:
-> `/etc/uci-defaults/08_drop-missing-target-feed` (no more apk 404),
-> `/sbin/vmg8825-format-overlay` (install §6a without the `.bin`) and
-> `/sbin/vmg8825-backup-flash` (install §5 in one command). Also,
-> `modules.builtin` now lists the watchdog driver, which was already in
-> the kernel. These exact files have not been booted on hardware
-> themselves. If one misbehaves, the 2026-09-21 images are in git history
-> (`git log -- firmware/`). Check your download with
-> `sha256sum -c SHA256SUMS` in this directory, or run `tools/preflight.sh`.
+> **All images were rebuilt 2026-11-21** from the current tree on OpenWrt
+> `6bd48701` (Linux **6.18.64**) using `tools/build-in-docker.sh`.
+> `vmg8825-t50-era-signed.bin` was flashed and verified live on hardware:
+> clean `6.18.64` boot, `eth0` + `lan1`–`lan4` + `wan` via DSA (unused
+> `gmac1`/`eth1` disabled), RPS mask `0xe` active on `eth0`, both WiFi
+> radios up with auto-detected per-device calibration (`2.4 GHz` @ 20 dBm,
+> `5 GHz` @ 26 dBm), LEDs/buttons configured, and hardware PPE flow
+> offloading enabled. Check your download with `sha256sum -c SHA256SUMS`
+> in this directory, or run `tools/preflight.sh`.
 
 - `vmg8825-t50-era-signed.bin` — the OpenWrt build, wrapped in the
   era-0x174 header this board's zloader expects, ready to flash to MAIN.

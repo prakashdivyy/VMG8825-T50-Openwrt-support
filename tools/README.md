@@ -61,9 +61,7 @@ step-by-step.
 ## Bootloader patch
 
 See `../BOOTLOADER-PATCH.md`. `../bldr-patch/patch_stage2.py` is the
-build-independent CRC/RSA stage2 patcher; the older
-`patch_stage2_rsa_bypass.py` + `patch_stage2_crc_bypass.py` pair is a
-fixed-offset reference fallback.
+build-independent CRC/RSA stage2 patcher.
 
 ## Build / flash helpers
 

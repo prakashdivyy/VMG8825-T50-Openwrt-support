@@ -47,11 +47,11 @@ else
 fi
 
 echo "unlock tool"
-pw=$("$REPO/tools/atenv3/atenv3_passwd" 2E01C00309E01B14300B07B36A59F271010A 2>&1)
+pw=$(python3 "$REPO/bldr-patch/atenv3.py" 2E01C00309E01B14300B07B36A59F271010A 2>&1)
 if [ "$pw" = 97760452113818812721555971724 ]; then
-	ok "atenv3_passwd runs and derives the test vector"
+	ok "bldr-patch/atenv3.py runs and derives the test vector"
 else
-	bad "atenv3_passwd: '$pw' -- build it from source: cc -O2 -o tools/atenv3/atenv3_passwd tools/atenv3/atenv3_passwd.c"
+	bad "bldr-patch/atenv3.py: '$pw' -- expected 97760452113818812721555971724"
 fi
 
 echo "downloads"

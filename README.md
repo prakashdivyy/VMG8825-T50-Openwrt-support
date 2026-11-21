@@ -50,9 +50,8 @@ console, and following `install-guide/README.md` step by step.
   interface at all
   (`783-net-dsa-mt7530-en751627-five-user-ports.patch`).
 
-  `gmac1`/`eth1` is a separate MAC with no PHY polled; it reports a stale
-  `carrier=1` and carries no traffic. It is not wired to any socket on
-  this board.
+  `gmac1`/`eth1` is unused hardware on this board (not wired to any
+  socket) and is left disabled in the board devicetree.
 - Hardware NAT offload (PPE) — see the performance section below.
 - Hardware watchdog — the EN751627's timer3 block (same as the EN7581's,
   at `0x1fbf0100`) drives `/dev/watchdog0` through the in-tree
@@ -160,11 +159,10 @@ checked, 42 agreeing with the hardware.
   upstream `mt76`/mt7615 stability class of bug (openwrt/mt76#690,
   openwrt/mt76#897), not something this port introduces — but it has not
   been soak-tested either way.
-- `gmac1`/`eth1` reports a stale `carrier=1` and carries no traffic; it
-  is not wired to any socket on this board. The old
-  `002-mt7530-embedded-phy-init.patch` switch-forwarding fix is
-  unreachable dead code under DSA — it was chasing bugs on what turned
-  out to be a jack the switch already owned.
+- `gmac1`/`eth1` is unused hardware on this board (disabled in the board
+  DTS). The old `002-mt7530-embedded-phy-init.patch` switch-forwarding
+  fix is unreachable dead code under DSA — it was chasing bugs on what
+  turned out to be a jack the switch already owned.
 - `dscp_byte_swap` for `en751627_soc_data` is copied from EN751221 and
   unverified — only matters once QoS/DSCP marking is in play.
 - `dev_flash_cycle.py`'s MTD3 block range is hardcoded for this image's
@@ -210,11 +208,10 @@ The manual steps are in `firmware/README.md` ("Building your own").
 
 If your distro lacks OpenWrt's build dependencies (or you are not on
 Linux), `tools/build-in-docker.sh` runs the same build in a pinned
-Ubuntu 24.04 container. It takes the same options and writes to the same
-`out/`. Use one or the other for a given checkout, not both: host tools
-built on one side do not always run on the other. (The container image
-builds, but a complete firmware build inside it has not been run through
-to the end yet; the host route above has.)
+Ubuntu 24.04 container (and automatically uses a case-sensitive ext4
+Docker volume on macOS). It takes the same options and writes to the
+same `out/`. Use one or the other for a given checkout, not both: host
+tools built on one side do not always run on the other.
 
 ## Development workflow
 
@@ -254,7 +251,7 @@ module for a different smart-plug API.
 |-----------|--------|
 | SoC | EcoNet **EN7516** (EN751627 family), MIPS **1004Kc**, 2x900 MHz, big-endian |
 | OpenWrt target | `econet` / subtarget **`en751627`** |
-| Tested against | OpenWrt `main` @ [`928cd26`](https://github.com/openwrt/openwrt/commit/928cd26bd938b8ac46b79e14f5f9f4b1d772abe8) (2026-09-17), kernel **6.18** — `openwrt/` is a submodule tracking `main`, which moves; `git checkout 928cd26` in `openwrt/` to reproduce the exact tested combination, or use it as a starting point and expect some drift on a newer checkout |
+| Tested against | OpenWrt `main` @ [`6bd48701`](https://github.com/openwrt/openwrt/commit/6bd48701eff9ac65bb626b6c903f5f2155bbfa6e), kernel **6.18.64** — `openwrt/` is a submodule tracking `main`, which moves; `git checkout 6bd48701` in `openwrt/` to reproduce the exact tested combination, or use it as a starting point and expect some drift on a newer checkout |
 | RAM | 512 MB DDR3 (devicetree maps 448 MB; confirmed booting, `MemTotal: 443152 kB`) |
 | Flash | **SPI NAND** Winbond **W25M02GV**, 256 MiB, SLC, page 2048 / OOB 64 |
 | Switch/ethernet | Integrated in SoC, 1xWAN + 4xLAN gigabit — all five via the in-tree `mediatek,mt7530` DSA driver, each socket confirmed with a cable and forwarding 937 Mbit/s through the PPE. `gmac1`/`eth1` (out-of-tree `econet-eth`) is unused dead hardware on this board |
@@ -295,18 +292,17 @@ full OpenWrt checkout:
   `package/kernel/econet-eth/`, applied on top of the upstream checkout
   (see its own README for the exact copy command).
 - `bldr-patch/` — the flashing toolchain (`dev_flash_cycle.py`,
-  `power_cycle.py`) and the bootloader patcher `patch_stage2.py`, which
-  finds the CRC/RSA gates by landmark so it works across zloader builds
-  (hardware-confirmed on v1.4.4 01/14/2020). The older
-  `patch_stage2_rsa_bypass.py` + `patch_stage2_crc_bypass.py` pair is a
-  fixed-offset reference fallback.
+  `netboot.py`, `zhal_serial.py`, `atenv3.py`, `power_cycle.py`) and the
+  bootloader patcher `patch_stage2.py`, which finds the CRC/RSA gates by
+  landmark so it works across zloader builds (hardware-confirmed on
+  v1.4.4 01/14/2020).
 - `build_era_trx.py` — wraps a slim OpenWrt `.trx` into the era-0x174
   header this board's zloader expects, with a self-check.
 - `board-files/` — DTS/image scaffolding and the era-header template
   `build_era_trx.py` uses.
-- `tools/atenv3/` — the supervisor-password derivation tool needed for
-  the bootloader's `ATSE`/`ATEN` debug-unlock (source plus a static
-  x86-64 binary that runs on any 64-bit x86 Linux).
+- `tools/atenv3/` — C reference source for the supervisor-password
+  derivation tool needed for `ATSE`/`ATEN` debug-unlock (the portable
+  Python implementation used by `bldr-patch/` is `bldr-patch/atenv3.py`).
 - `tools/preflight.sh` — checks the PC side before an install (tools,
   serial port access, unlock tool, image checksums, stub/kernel fit).
 - `tools/build-firmware.sh`, `tools/build-in-docker.sh`,
