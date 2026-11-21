@@ -30,6 +30,8 @@
 START=21
 
 apply_rps() {
+	. /lib/functions.sh
+	[ "$(board_name)" = "zyxel,vmg8825-t50" ] || return 0
 	for q in /sys/class/net/eth0/queues/rx-*/rps_cpus; do
 		[ -e "$q" ] && echo e > "$q"
 	done
